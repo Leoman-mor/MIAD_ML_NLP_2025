@@ -1,19 +1,12 @@
-# spotify_api_github.py - API para predicción de popularidad usando modelo desde GitHub
+# spotify_api_local.py - API para predicción de popularidad usando archivos locales
 
 import pandas as pd
 import numpy as np
 import joblib
 import json
-import requests
-from io import BytesIO
+import os
 from flask import Flask
 from flask_restx import Api, Resource, fields, reqparse
-import os
-import tempfile
-
-# URLs de GitHub donde están almacenados los archivos
-MODEL_URL = "https://github.com/Leoman-mor/MIAD_ML_NLP_2025/blob/main/Semana%204/spotify_popularity_model.pkl"
-FEATURE_LIST_URL = "https://github.com/Leoman-mor/MIAD_ML_NLP_2025/blob/main/Semana%204/feature_list.json"
 
 # Inicializar la aplicación Flask y la API
 app = Flask(__name__)
@@ -25,42 +18,29 @@ api = Api(app,
 # Definir el espacio de nombres para los endpoints
 ns = api.namespace('spotify', description='Predicción de popularidad')
 
-def download_from_github(url):
-    """Descarga un archivo desde GitHub"""
-    response = requests.get(url)
-    if response.status_code == 200:
-        return BytesIO(response.content)
-    else:
-        raise Exception(f"Error descargando desde GitHub: {response.status_code}")
+# Rutas a los archivos del modelo (en la misma carpeta que este script)
+MODEL_PATH = 'spotify_popularity_model.pkl'
+FEATURE_LIST_PATH = 'feature_list.json'
 
-# Cargar el modelo y features desde GitHub
-print("Descargando modelo desde GitHub...")
-model = None
-feature_list = None
-
-try:
-    # Crear un archivo temporal para el modelo
-    with tempfile.NamedTemporaryFile(delete=False) as tmp_model_file:
-        tmp_model_path = tmp_model_file.name
-        # Descargar el contenido del modelo
-        model_content = download_from_github(MODEL_URL)
-        # Escribir el contenido al archivo temporal
-        tmp_model_file.write(model_content.getbuffer())
+# Verificar que los archivos existen
+if not os.path.exists(MODEL_PATH) or not os.path.exists(FEATURE_LIST_PATH):
+    print(f"ERROR: No se encontraron los archivos del modelo:")
+    print(f"  - Modelo: {'✓' if os.path.exists(MODEL_PATH) else '✗'} ({MODEL_PATH})")
+    print(f"  - Características: {'✓' if os.path.exists(FEATURE_LIST_PATH) else '✗'} ({FEATURE_LIST_PATH})")
+    print("Asegúrate de que los archivos estén en la misma carpeta que este script.")
+    model = None
+    feature_list = None
+else:
+    # Cargar el modelo entrenado
+    print(f"Cargando modelo desde {MODEL_PATH}...")
+    model = joblib.load(MODEL_PATH)
     
-    # Cargar el modelo desde el archivo temporal
-    model = joblib.load(tmp_model_path)
-    # Eliminar el archivo temporal
-    os.unlink(tmp_model_path)
-    
-    # Descargar la lista de características
-    feature_list_content = download_from_github(FEATURE_LIST_URL)
-    feature_list = json.loads(feature_list_content.getvalue().decode('utf-8'))
+    # Cargar la lista de características
+    print(f"Cargando lista de características desde {FEATURE_LIST_PATH}...")
+    with open(FEATURE_LIST_PATH, 'r') as f:
+        feature_list = json.load(f)
     
     print(f"Modelo cargado con {len(feature_list)} características")
-    
-except Exception as e:
-    print(f"Error cargando el modelo desde GitHub: {str(e)}")
-    print("La API no podrá funcionar correctamente sin el modelo")
 
 # Definir el modelo de datos para la respuesta
 resource_fields = api.model('PredictionResult', {
